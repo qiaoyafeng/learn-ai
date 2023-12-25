@@ -1,0 +1,74 @@
+{
+    "train": {
+        "samples": [
+            {
+                "index": 1,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            },
+            {
+                "index": 2,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            },
+                      {
+                "index": 3,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            },
+                      {
+                "index": 4,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            },
+                      {
+                "index": 5,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            },
+                      {
+                "index": 6,
+                "sdnn": 49,
+                "sdann": 40,
+                "sdnn_index": 26,
+                "rmssd": 15,
+                "pnn50": 0.0062,
+                "triangular_index": 10.18,
+                "hf": 77.8,
+                "lf": 117.1
+            }
+
+        ]
+    },
+    "test": {}
+}
