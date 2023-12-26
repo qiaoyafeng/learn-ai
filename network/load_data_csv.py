@@ -52,6 +52,8 @@ examples, labels = next(iter(raw_train_data))  # 第一个批次
 print("EXAMPLES: \n", examples, "\n")
 print("LABELS: \n", labels)
 
+
+# 数据预处理
 CATEGORIES = {
     "sex": ["male", "female"],
     "class": ["First", "Second", "Third"],
@@ -68,7 +70,7 @@ for feature, vocab in CATEGORIES.items():
     categorical_columns.append(tf.feature_column.indicator_column(cat_col))
 
 
-categorical_columns
+print(f"categorical_columns: {categorical_columns}")
 
 
 def process_continuous_data(mean, data):
@@ -93,8 +95,8 @@ for feature in MEANS.keys():
     )
     numerical_columns.append(num_col)
 
-# 你刚才创建的内容。
-numerical_columns
+print(f"numerical_columns: {numerical_columns}")
+
 
 preprocessing_layer = tf.keras.layers.DenseFeatures(
     categorical_columns + numerical_columns
@@ -115,4 +117,18 @@ train_data = raw_train_data.shuffle(500)
 test_data = raw_test_data
 
 
-model.fit(train_data, epochs=2000)
+model.fit(train_data, epochs=200)
+
+test_loss, test_accuracy = model.evaluate(test_data)
+
+print("\n\nTest Loss {}, Test Accuracy {}".format(test_loss, test_accuracy))
+
+predictions = model.predict(test_data)
+
+# 显示部分结果
+for prediction, survived in zip(predictions[:10], list(test_data)[0][1][:10]):
+    print(
+        "Predicted survival: {:.2%}".format(prediction[0]),
+        " | Actual outcome: ",
+        ("SURVIVED" if bool(survived) else "DIED"),
+    )
