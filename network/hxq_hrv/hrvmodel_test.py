@@ -91,10 +91,14 @@ norm_hrv_model.compile(
 norm_model_history = norm_hrv_model.fit(
     hrv_features,
     hrv_labels,
-    epochs=500,
+    epochs=200,
     verbose=1,
     validation_data=(hrv_test_features, hrv_test_labels),
 )
+
+
+keras_model_path = 'hxq_keras_save.keras'
+norm_hrv_model.save(keras_model_path)
 
 results = norm_hrv_model.evaluate(hrv_test_features, hrv_test_labels, verbose=2)
 
