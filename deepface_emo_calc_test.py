@@ -136,13 +136,13 @@ if __name__ == "__main__":
     image_results = analyze_image(image_path)
     print("图片十二维情绪指数：")
     for k, v in image_results.items():
-        print(f"{k}: {v}")
+        print(f"{k}: {abs(v)}")
     print(f"{'*' * 50}")
     video_path = "wenzeng.mp4"
     video_results = analyze_video(video_path)
     print("视频十二维情绪指数：")
     for k, v in video_results.items():
-        print(f"{k}: {v}")
+        print(f"{k}: {abs(v)}")
 
 
 
