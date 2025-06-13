@@ -39,7 +39,7 @@ def calculate_emotions(au_data):
     emotions = {}
 
     # 攻击性 (Aggressiveness)
-    emotions['攻击性'] = sigmoid(
+    emotions['敌意'] = sigmoid(
         0.8 * au_values['AU04_r'] +  # 眉毛下压
         0.6 * au_values['AU23_r'] +  # 嘴唇紧缩
         0.5 * au_values['AU05_r']  # 上眼睑上抬
@@ -53,19 +53,19 @@ def calculate_emotions(au_data):
                          ) / 2.2
 
     # 不安 (Restlessness)
-    emotions['不安'] = sigmoid(
+    emotions['焦虑'] = sigmoid(
         0.6 * au_values['AU02_r'] +  # 眉毛上抬
         0.5 * au_values['AU20_r']  # 嘴唇拉伸
     ) / 1.8
 
     # 怀疑 (Suspicion)
-    emotions['怀疑'] = (
+    emotions['稳定性'] = (
                              0.7 * au_values['AU04_r'] +  # 眉毛下压
                              0.5 * au_values['AU14_r']  # 酒窝
                      ) / 2.0
 
     # 平衡 (Balance)
-    emotions['平衡'] = sigmoid(
+    emotions['协调性'] = sigmoid(
         0.6 * au_values['AU12_r'] +  # 嘴角上提（正向）
         0.5 * au_values['AU25_r'] -  # 嘴唇分开（正向）
         0.4 * au_values['AU04_r']  # 眉毛下压（负向）
@@ -79,7 +79,7 @@ def calculate_emotions(au_data):
                          ) / 2.2
 
     # 能量 (Energy)
-    emotions['能量'] = (
+    emotions['活跃度'] = (
                              0.7 * au_values['AU05_r'] +  # 上眼睑上抬
                              0.6 * au_values['AU26_r']  # 下颌下降
                      ) / 1.8
@@ -91,20 +91,20 @@ def calculate_emotions(au_data):
                                  )
 
     # 抑制 (Inhibition)
-    emotions['抑制'] = sigmoid(
+    emotions['自控力'] = sigmoid(
         0.8 * au_values['AU14_r'] +  # 酒窝
         0.6 * au_values['AU17_r']  # 下巴抬起
     ) / 2.0
 
     # 神经质 (Neuroticism)
-    emotions['神经质'] = min(1.0,
+    emotions['易激性'] = min(1.0,
                           0.5 * au_values['AU01_r'] +  # 眉毛内角上抬
                           0.6 * au_values['AU04_r'] +  # 眉毛下压
                           0.4 * au_values['AU15_r']  # 嘴角下降
                           ) / 2.0
 
     # 抑郁 (Depression)
-    emotions['抑郁'] = (
+    emotions['低迷值'] = (
                              0.8 * au_values['AU15_r'] +  # 嘴角下降
                              0.7 * au_values['AU17_r']  # 下巴抬起
                      ) / 2.0
@@ -240,8 +240,8 @@ def process_video(video_path, output_dir="./output"):
             video_summary[f"{col}_peak_mean"] = peaks.mean()
 
     # 情感平衡分析
-    positive_emotions = ["自信", "能量", "幸福", "平衡"]
-    negative_emotions = ["攻击性", "压力", "不安", "抑郁", "神经质"]
+    positive_emotions = ["自信", "活跃度", "幸福", "协调性"]
+    negative_emotions = ["敌意", "压力", "焦虑", "低迷值", "易激性"]
 
     # video_summary["positive_mean"] = emotions_df[positive_emotions].mean(axis=1).mean()
     # video_summary["negative_mean"] = emotions_df[negative_emotions].mean(axis=1).mean()
@@ -312,7 +312,7 @@ def process_video(video_path, output_dir="./output"):
 if __name__ == "__main__":
     # 使用示例
     video_path = "wenzeng.mp4"
-    video_path = "yunfei.mp4"
+    # video_path = "yunfei.mp4"
     # video_path = "lvjiao.mp4"
     # video_path = "zhangmi.mp4"
     # video_path = "qiaoyafeng.mp4"
