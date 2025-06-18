@@ -2,12 +2,9 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import pandas as pd
-import os
-import time
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from matplotlib.patches import PathPatch
-from matplotlib.font_manager import FontProperties
+from scipy import stats
 import matplotlib
 
 matplotlib.use("TkAgg")
@@ -16,34 +13,64 @@ matplotlib.use("TkAgg")
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
-# 情感映射配置
+
+# 情感维度映射配置 (特征: 权重)
 EMOTION_MAPPING = {
-    "攻击性": ["mouthPucker", "jawForward", "browDownLeft", "browDownRight"],
-    "压力": ["eyeSquintLeft", "eyeSquintRight", "mouthPressLeft", "mouthPressRight"],
-    "不安": ["mouthStretchLeft", "mouthStretchRight", "browInnerUp"],
-    "焦虑": ["cheekSquintLeft", "cheekSquintRight", "jawOpen"],
-    "怀疑": ["mouthDimpleLeft", "mouthDimpleRight", "noseSneerLeft"],
-    "平衡": ["mouthSmileLeft", "mouthSmileRight", "eyeBlinkLeft"],
-    "能量": ["eyeWideLeft", "eyeWideRight", "jawOpen"],
-    "活力": ["mouthSmileLeft", "mouthSmileRight", "cheekPuff"],
-    "自控能力": ["mouthClose", "lipsToward", "browInnerUp"],
-    "抑制": ["mouthFrownLeft", "mouthFrownRight", "browDownLeft"],
-    "神经质": ["eyeBlinkLeft", "eyeBlinkRight", "mouthShrugLower"],
-    "抑郁": ["mouthFrownLeft", "mouthFrownRight", "browInnerUp"],
-    "幸福": ["mouthSmileLeft", "mouthSmileRight", "cheekSquintLeft"]
+    '攻击性': {
+        'jawOpen': 0.25, 'browDownLeft': 0.15, 'browDownRight': 0.15,
+        'mouthStretchLeft': 0.15, 'mouthStretchRight': 0.15, 'jawForward': 0.15
+    },
+    '压力': {
+        'browInnerUp': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2,
+        'mouthFrownLeft': 0.15, 'mouthFrownRight': 0.15
+    },
+    '不安': {
+        'eyeLookDownLeft': 0.2, 'eyeLookDownRight': 0.2, 'mouthDimpleLeft': 0.15,
+        'mouthDimpleRight': 0.15, 'browOuterUpLeft': 0.15, 'browOuterUpRight': 0.15
+    },
+    '怀疑': {
+        'eyeLookInLeft': 0.25, 'eyeLookInRight': 0.25, 'mouthUpperUpLeft': 0.15,
+        'mouthUpperUpRight': 0.15, 'noseSneerLeft': 0.1, 'noseSneerRight': 0.1
+    },
+    '平衡': {
+        '_neutral': 0.5, 'mouthSmileLeft': 0.15, 'mouthSmileRight': 0.15,
+        'browInnerUp': 0.2
+    },
+    '自信': {
+        'eyeLookUpLeft': 0.2, 'eyeLookUpRight': 0.2, 'mouthSmileLeft': 0.2,
+        'mouthSmileRight': 0.2, 'jawForward': 0.2
+    },
+    '能量': {
+        'eyeWideLeft': 0.2, 'eyeWideRight': 0.2, 'mouthSmileLeft': 0.2,
+        'mouthSmileRight': 0.2, 'browInnerUp': 0.2
+    },
+    '自我调节': {
+        'mouthPucker': 0.3, 'lipsFunnel': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2
+    },
+    '抑制': {
+        'mouthClose': 0.4, 'lipsToward': 0.3, 'jawThrust': 0.3
+    },
+    '神经质': {
+        'eyeBlinkLeft': 0.2, 'eyeBlinkRight': 0.2, 'browDownLeft': 0.2,
+        'browDownRight': 0.2, 'mouthFrownLeft': 0.2, 'mouthFrownRight': 0.2
+    },
+    '抑郁': {
+        'browDownLeft': 0.25, 'browDownRight': 0.25, 'eyeLookDownLeft': 0.2,
+        'eyeLookDownRight': 0.2, 'mouthFrownLeft': 0.15, 'mouthFrownRight': 0.15
+    },
+    '幸福': {
+        'mouthSmileLeft': 0.3, 'mouthSmileRight': 0.3, 'cheekSquintLeft': 0.2,
+        'cheekSquintRight': 0.2, 'eyeSquintLeft': 0.1, 'eyeSquintRight': 0.1
+    }
 }
 
-REVERSE_EMOTIONS = ["自控能力"]  # 需要反向计算的维度
 
-
-def extract_blendshapes_from_video(video_path, output_csv='blendshapes.csv'):
+# 视频处理函数
+def process_video(video_path, output_csv='blendshapes.csv'):
     """
-    从视频中提取面部Blendshapes数据并保存为CSV文件
-    使用MediaPipe FaceLandmarker的VIDEO模式
-    """
-    # 初始化MediaPipe解决方案
-    mp_face_mesh = mp.solutions.face_mesh
-    mp_face_detection = mp.solutions.face_detection
+        从视频中提取面部Blendshapes数据并保存为CSV文件
+        使用MediaPipe FaceLandmarker的VIDEO模式
+        """
 
     # 创建FaceLandmarker选项
     base_options = mp.tasks.BaseOptions(model_asset_path='face_landmarker.task')
@@ -143,149 +170,266 @@ def extract_blendshapes_from_video(video_path, output_csv='blendshapes.csv'):
         print("未检测到任何面部数据")
         return None
 
-
-def calculate_emotion_scores(blendshapes_data):
-    """
-    计算每帧的情感维度得分
-    :param blendshapes_data: DataFrame格式的Blendshapes数据
-    :return: 情感维度DataFrame (frame x emotions)
-    """
-    emotion_scores = pd.DataFrame()
+# 情感维度计算
+def calculate_emotions(blendshapes_df):
+    emotions_df = pd.DataFrame()
 
     for emotion, features in EMOTION_MAPPING.items():
-        # 提取相关特征列
-        valid_features = [f for f in features if f in blendshapes_data.columns]
+        total_weight = sum(features.values())
+        weighted_scores = []
 
-        if not valid_features:
-            print(f"警告: {emotion} 无有效特征")
-            continue
+        for idx, row in blendshapes_df.iterrows():
+            score_sum = 0
+            valid_features = 0
 
-        # 计算特征均值
-        mean_values = blendshapes_data[valid_features].mean(axis=1)
+            for feature, weight in features.items():
+                if feature in row and not pd.isna(row[feature]):
+                    score_sum += row[feature] * weight
+                    valid_features += weight
 
-        # 反向特征处理
-        if emotion in REVERSE_EMOTIONS:
-            mean_values = 1 - mean_values
+            # 标准化处理
+            if valid_features > 0:
+                normalized_score = min(100, max(0, (score_sum / valid_features) * 100))
+            else:
+                normalized_score = np.nan
 
-        # 归一化到0-100
-        emotion_scores[emotion] = mean_values * 100
+            weighted_scores.append(normalized_score)
 
-    return emotion_scores
+        emotions_df[emotion] = weighted_scores
+
+    # 添加时间戳
+    emotions_df['timestamp'] = blendshapes_df['timestamp']
+    emotions_df['frame'] = blendshapes_df['frame']
+    return emotions_df.dropna()
 
 
-def generate_visualizations(emotion_scores):
-    """
-    生成三种可视化图表
-    :param emotion_scores: 情感维度DataFrame
-    """
-    # 1. 雷达图 (均值)
-    plt.figure(figsize=(10, 10))
-    ax = plt.subplot(111, polar=True)
+# 情感维度计算
+def calculate_emotions(blendshapes_df):
+    emotions_df = pd.DataFrame()
 
-    stats = emotion_scores.mean()
-    categories = list(stats.index)
+    for emotion, features in EMOTION_MAPPING.items():
+        total_weight = sum(features.values())
+        weighted_scores = []
+
+        for idx, row in blendshapes_df.iterrows():
+            score_sum = 0
+            valid_features = 0
+
+            for feature, weight in features.items():
+                if feature in row and not pd.isna(row[feature]):
+                    score_sum += row[feature] * weight
+                    valid_features += weight
+
+            # 标准化处理
+            if valid_features > 0:
+                normalized_score = min(100, max(0, (score_sum / valid_features) * 100))
+            else:
+                normalized_score = np.nan
+
+            weighted_scores.append(normalized_score)
+
+        emotions_df[emotion] = weighted_scores
+
+    # 添加时间戳
+    emotions_df['timestamp'] = blendshapes_df['timestamp']
+    emotions_df['frame'] = blendshapes_df['frame']
+    return emotions_df.dropna()
+
+
+# 可视化函数（使用中位数）
+def visualize_emotions(emotions_df):
+    # 计算参考范围（基于整个视频的情感分数）
+    reference_ranges = {}
+    for emotion in EMOTION_MAPPING.keys():
+        data = emotions_df[emotion].dropna()
+        median = data.median()
+        q1 = data.quantile(0.25)
+        q3 = data.quantile(0.75)
+        iqr = q3 - q1
+        reference_ranges[emotion] = {
+            'low': max(0, q1 - 1.5 * iqr),
+            'normal_low': q1,
+            'normal_high': q3,
+            'high': min(100, q3 + 1.5 * iqr)
+        }
+
+    # 1. 雷达图（带参考范围）
+    plt.figure(figsize=(12, 10))
+    median_emotions = emotions_df.drop(columns=["timestamp", "frame"]).median(numeric_only=True)
+    categories = list(EMOTION_MAPPING.keys())
     N = len(categories)
 
+    # 计算角度
     angles = np.linspace(0, 2 * np.pi, N, endpoint=False).tolist()
-    stats = np.concatenate((stats.values, [stats.values[0]]))
-    angles += angles[:1]
+    angles += angles[:1]  # 闭合多边形
 
-    ax.plot(angles, stats, 'o-', linewidth=2, color='blue')
-    ax.fill(angles, stats, alpha=0.25, color='skyblue')
-    ax.set_theta_offset(np.pi / 2)
-    ax.set_theta_direction(-1)
-    ax.set_thetagrids(np.degrees(angles[:-1]), categories)
-    ax.set_rlabel_position(0)
-    plt.yticks([20, 40, 60, 80], ["20", "40", "60", "80"], color="grey", size=7)
+    # 创建极坐标轴
+    ax = plt.subplot(111, polar=True)
+
+    # 绘制参考范围区域
+    low_range = [reference_ranges[cat]['low'] for cat in categories] + [reference_ranges[categories[0]]['low']]
+    normal_low_range = [reference_ranges[cat]['normal_low'] for cat in categories] + [
+        reference_ranges[categories[0]]['normal_low']]
+    normal_high_range = [reference_ranges[cat]['normal_high'] for cat in categories] + [
+        reference_ranges[categories[0]]['normal_high']]
+    high_range = [reference_ranges[cat]['high'] for cat in categories] + [reference_ranges[categories[0]]['high']]
+
+    # 填充低范围区域 (0 - 低边界)
+    ax.fill_between(angles, 0, low_range, color='lightcoral', alpha=0.3, label='低范围')
+
+    # 填充正常范围区域 (正常低边界 - 正常高边界)
+    ax.fill_between(angles, normal_low_range, normal_high_range, color='lightgreen', alpha=0.4, label='正常范围')
+
+    # 填充高范围区域 (高边界 - 100)
+    ax.fill_between(angles, high_range, [100] * len(angles), color='gold', alpha=0.3, label='高范围')
+
+    # 绘制中位情感分数
+    values = median_emotions.values.tolist()
+    values += values[:1]
+    ax.plot(angles, values, 'o-', linewidth=2, markersize=8, color='dodgerblue', label='中位情感分数')
+    ax.fill(angles, values, color='dodgerblue', alpha=0.2)
+
+    # 设置坐标轴
+    plt.xticks(angles[:-1], categories, fontsize=10)
+    plt.yticks([0, 20, 40, 60, 80, 100], ["0", "20", "40", "60", "80", "100"], fontsize=8)
     plt.ylim(0, 100)
-    plt.title("情感维度雷达图", size=20, pad=20)
-    plt.savefig('emotion_radar.png', dpi=300, bbox_inches='tight')
 
-    # 2. 箱线图 (分布)
+    # 添加标题和图例
+    plt.title('情感维度雷达图（含参考范围）', fontsize=14, pad=20)
+    plt.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
+
+    # 添加参考范围说明
+    plt.figtext(0.5, 0.01,
+                f"参考范围说明（基于视频数据计算）:\n"
+                f"低范围: 0-{np.median([ref['low'] for ref in reference_ranges.values()]):.1f} "
+                f"正常范围: {np.median([ref['normal_low'] for ref in reference_ranges.values()]):.1f}-"
+                f"{np.median([ref['normal_high'] for ref in reference_ranges.values()]):.1f} "
+                f"高范围: {np.median([ref['high'] for ref in reference_ranges.values()]):.1f}-100",
+                ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
+
+    plt.savefig('emotion_radar_with_ranges.png', bbox_inches='tight')
+    plt.close()
+
+    # 2. 箱线图（使用中位数）
     plt.figure(figsize=(14, 8))
-    boxplot = emotion_scores.plot(kind='box', vert=True, patch_artist=True)
-    plt.title("情感维度分布箱线图")
-    plt.ylabel("得分 (0-100)")
-    plt.xticks(rotation=15)
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    # 箱线图自动显示中位数，无需额外设置
+    emotions_df.drop(columns=['timestamp', 'frame']).boxplot(showmeans=False,
+                                                             medianprops={'color': 'blue', 'linewidth': 2})
+    plt.title('情感维度分布箱线图', fontsize=14)
+    plt.ylabel('分值 (0-100)', fontsize=12)
+    plt.xticks(rotation=45, fontsize=10)
+    plt.grid(alpha=0.3)
 
-    # 设置箱线图颜色
-    colors = ['lightblue', 'lightgreen', 'lightcoral', 'lightsalmon', 'lightpink',
-              'lightseagreen', 'lightsteelblue', 'lightskyblue', 'lightcyan',
-              'lightyellow', 'lightgray', 'lightgoldenrodyellow', 'lightcoral']
+    # 添加中位数说明
+    plt.figtext(0.5, 0.01,
+                "箱线图说明：箱体表示四分位距(IQR)，中间线表示中位数，须线表示1.5倍IQR范围",
+                ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
 
-    for patch, color in zip(boxplot.findobj(match=PathPatch), colors):
-        patch.set_facecolor(color)
+    plt.savefig('emotion_boxplot.png', bbox_inches='tight')
+    plt.close()
+
+    # 3. 时间变化曲线（使用滚动中位数）
+    plt.figure(figsize=(14, 10))
+    time_seconds = emotions_df['timestamp'] / 1000
+
+    # 计算滚动中位数（窗口大小为15帧）
+    rolling_median = emotions_df.copy()
+    for emotion in EMOTION_MAPPING.keys():
+        rolling_median[emotion] = rolling_median[emotion].rolling(window=15, min_periods=1).median()
+
+    for i, emotion in enumerate(EMOTION_MAPPING.keys()):
+        plt.subplot(4, 3, i + 1)
+
+        # 原始值（浅色）
+        plt.plot(time_seconds, emotions_df[emotion], color='lightsteelblue', alpha=0.4, label='原始值')
+
+        # 滚动中位数（深色）
+        plt.plot(time_seconds, rolling_median[emotion], color='steelblue', linewidth=2, label='滚动中位数')
+
+        # 添加参考范围线
+        plt.axhline(y=reference_ranges[emotion]['normal_low'], color='green', linestyle='--', alpha=0.5)
+        plt.axhline(y=reference_ranges[emotion]['normal_high'], color='green', linestyle='--', alpha=0.5)
+        plt.axhspan(reference_ranges[emotion]['normal_low'], reference_ranges[emotion]['normal_high'],
+                    facecolor='lightgreen', alpha=0.2)
+
+        # 添加中位数线
+        plt.axhline(y=reference_ranges[emotion]['normal_low'] + (
+                    reference_ranges[emotion]['normal_high'] - reference_ranges[emotion]['normal_low']) / 2,
+                    color='red', linestyle='-', alpha=0.3, linewidth=1)
+
+        plt.title(emotion, fontsize=12)
+        plt.xlabel('时间 (秒)', fontsize=9)
+        plt.ylabel('强度', fontsize=9)
+        plt.ylim(0, 100)
+        plt.grid(alpha=0.2)
+
+        # 只在第一张图添加图例
+        if i == 0:
+            plt.legend(loc='upper right', fontsize=8)
 
     plt.tight_layout()
-    plt.savefig('emotion_boxplot.png', dpi=300)
+    plt.savefig('emotion_timeline.png')
+    plt.close()
 
-    # 3. 时间变化曲线
-    plt.figure(figsize=(15, 10))
-    colors = plt.cm.tab20(np.linspace(0, 1, len(emotion_scores.columns)))
+    # 4. 变化斜率图（基于中位数）
+    plt.figure(figsize=(14, 8))
+    slopes_df = pd.DataFrame()
 
-    for i, emotion in enumerate(emotion_scores.columns, 1):
-        plt.subplot(4, 4, i)
-        plt.plot(emotion_scores[emotion], lw=1.5, color=colors[i - 1])
-        plt.title(emotion)
-        plt.ylim(0, 100)
-        plt.grid(alpha=0.3)
-        if i > 12:
-            plt.xlabel("帧数")
+    # 使用滚动中位数计算斜率
+    for emotion in EMOTION_MAPPING.keys():
+        # 计算一阶导数（变化斜率）
+        smoothed_values = rolling_median[emotion].values
+        slopes = np.gradient(smoothed_values, emotions_df['timestamp'].values)
+        slopes_df[emotion] = slopes
 
-    plt.suptitle("情感维度时间变化曲线", fontsize=16)
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.savefig('emotion_timeseries.png', dpi=300)
+        # 可视化变化率
+        plt.subplot(3, 4, list(EMOTION_MAPPING.keys()).index(emotion) + 1)
+        plt.plot(time_seconds, slopes, color='purple')
+        plt.axhline(y=0, color='r', linestyle='-')
+
+        # 添加斜率阈值线
+        plt.axhline(y=0.2, color='orange', linestyle=':', alpha=0.5)
+        plt.axhline(y=-0.2, color='orange', linestyle=':', alpha=0.5)
+
+        plt.title(f'{emotion}变化率', fontsize=10)
+        plt.xlabel('时间 (秒)', fontsize=8)
+        plt.grid(alpha=0.2)
+
+    plt.tight_layout()
+    plt.savefig('emotion_slopes.png')
+    plt.close()
+
+    return slopes_df, reference_ranges
 
 
 # 主处理流程
 if __name__ == "__main__":
-    # 设置视频路径
-    video_path = "wenzeng.mp4"
-    output_csv = "blendshapes.csv"
+    # 处理视频并提取BlendShapes
+    blendshapes_df = process_video('wenzeng.mp4')
 
-    # 从视频中提取Blendshapes数据
-    blendshapes_data = extract_blendshapes_from_video(video_path, output_csv)
+    # 计算情感维度
+    emotions_df = calculate_emotions(blendshapes_df)
+    emotions_df.to_csv('emotion_scores.csv', index=False)
 
-    if blendshapes_data is not None:
-        # 计算情感得分
-        emotion_scores = calculate_emotion_scores(blendshapes_data.drop(columns=['frame', 'timestamp']))
+    # 可视化结果（返回参考范围）
+    slopes_df, reference_ranges = visualize_emotions(emotions_df)
 
-        # 添加时间信息
-        emotion_scores['frame'] = blendshapes_data['frame']
-        emotion_scores['timestamp'] = blendshapes_data['timestamp']
+    # 保存参考范围到文件（基于中位数）
+    with open('reference_ranges.txt', 'w') as f:
+        f.write("情感维度参考范围 (基于视频数据分析，使用中位数和四分位数):\n")
+        f.write("=" * 70 + "\n")
+        f.write(f"{'情感维度':<20}{'中位数':<10}{'低范围':<15}{'正常范围':<20}{'高范围':<15}\n")
+        f.write("-" * 70 + "\n")
 
-        # 生成可视化图表
-        generate_visualizations(emotion_scores.drop(columns=['frame', 'timestamp']))
+        for emotion, ranges in reference_ranges.items():
+            median_val = emotions_df[emotion].median()
+            low = f"{float(ranges['low']):.2f}"
+            normal_low = f"{float(ranges['normal_low']):.2f}"
+            normal_high = f"{float(ranges['normal_high']):.2f}"
+            normal_low_high = normal_low + normal_high
+            high = f"{float(ranges['high']):.2f}"
 
-        # 输出统计报告
-        report = emotion_scores.drop(columns=['frame', 'timestamp']).describe().T
-        report['健康范围'] = ['0-30', '0-40', '0-30', '0-35', '0-25',
-                          '60-100', '50-100', '60-100', '70-100', '0-30', '0-25', '0-20', '60-100']
-
-        # 添加参考值
-        report['参考解释'] = [
-            '低值表示平静，高值表示攻击倾向',
-            '低值表示放松，高值表示压力大',
-            '低值表示安心，高值表示不安',
-            '低值表示镇定，高值表示焦虑',
-            '低值表示信任，高值表示怀疑',
-            '低值表示失衡，高值表示平衡',
-            '低值表示疲惫，高值表示精力充沛',
-            '低值表示萎靡，高值表示充满活力',
-            '低值表示失控，高值表示自控能力强',
-            '低值表示表达自由，高值表示情感抑制',
-            '低值表示情绪稳定，高值表示神经质',
-            '低值表示情绪正常，高值表示抑郁倾向',
-            '低值表示不快乐，高值表示幸福'
-        ]
-
-        print(report[['mean', 'std', 'min', '50%', 'max', '健康范围', '参考解释']])
-
-        # 保存情感得分结果
-        emotion_scores.to_csv('emotion_scores.csv', index=False)
-        print("情感分析结果已保存到 emotion_scores.csv")
-
-        # 保存统计报告
-        report.to_csv('emotion_report.csv')
-        print("情感统计报告已保存到 emotion_report.csv")
+            f.write(f"{emotion:<20}{median_val:<10.2f}{low:<15}")
+            f.write(f"{normal_low_high :<20}")
+            f.write(f"{high :<15}\n")
+    print("处理完成！结果文件已保存。")
