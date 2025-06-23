@@ -45,25 +45,24 @@ EMOTION_MAPPING = {
         'mouthSmileRight': 0.2, 'browInnerUp': 0.2
     },
     '自我调节': {
-        'mouthPucker': 0.3, 'lipsFunnel': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2
+        'mouthPucker': 0.3, 'mouthFunnel': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2
     },
     '抑制': {
-        'mouthClose': 0.4, 'lipsToward': 0.3, 'jawThrust': 0.3
+        'mouthClose': 0.4, 'mouthClose': 0.3, 'jawForward': 0.3
     },
     '神经质': {
         'eyeBlinkLeft': 0.2, 'eyeBlinkRight': 0.2, 'browDownLeft': 0.2,
-        'browDownRight': 0.2, 'mouthFrownLeft': 0.2, 'mouthFrownRight': 0.2
+        'browDownRight': 0.2, 'mouthFrownLeft': 0.1, 'mouthFrownRight': 0.1
     },
     '抑郁': {
-        'browDownLeft': 0.25, 'browDownRight': 0.25, 'eyeLookDownLeft': 0.2,
-        'eyeLookDownRight': 0.2, 'mouthFrownLeft': 0.15, 'mouthFrownRight': 0.15
+        'browDownLeft': 0.25, 'browDownRight': 0.25, 'eyeLookDownLeft': 0.1,
+        'eyeLookDownRight': 0.1, 'mouthFrownLeft': 0.15, 'mouthFrownRight': 0.15
     },
     '幸福': {
-        'mouthSmileLeft': 0.3, 'mouthSmileRight': 0.3, 'cheekSquintLeft': 0.2,
-        'cheekSquintRight': 0.2, 'eyeSquintLeft': 0.1, 'eyeSquintRight': 0.1
+        'mouthSmileLeft': 0.3, 'mouthSmileRight': 0.3, 'cheekSquintLeft': 0.1,
+        'cheekSquintRight': 0.1, 'eyeSquintLeft': 0.1, 'eyeSquintRight': 0.1
     }
 }
-
 
 # 视频处理函数
 def process_video(video_path, output_csv='blendshapes.csv'):
@@ -170,38 +169,6 @@ def process_video(video_path, output_csv='blendshapes.csv'):
         print("未检测到任何面部数据")
         return None
 
-# 情感维度计算
-def calculate_emotions(blendshapes_df):
-    emotions_df = pd.DataFrame()
-
-    for emotion, features in EMOTION_MAPPING.items():
-        total_weight = sum(features.values())
-        weighted_scores = []
-
-        for idx, row in blendshapes_df.iterrows():
-            score_sum = 0
-            valid_features = 0
-
-            for feature, weight in features.items():
-                if feature in row and not pd.isna(row[feature]):
-                    score_sum += row[feature] * weight
-                    valid_features += weight
-
-            # 标准化处理
-            if valid_features > 0:
-                normalized_score = min(100, max(0, (score_sum / valid_features) * 100))
-            else:
-                normalized_score = np.nan
-
-            weighted_scores.append(normalized_score)
-
-        emotions_df[emotion] = weighted_scores
-
-    # 添加时间戳
-    emotions_df['timestamp'] = blendshapes_df['timestamp']
-    emotions_df['frame'] = blendshapes_df['frame']
-    return emotions_df.dropna()
-
 
 # 情感维度计算
 def calculate_emotions(blendshapes_df):
@@ -278,7 +245,7 @@ def visualize_emotions(emotions_df):
     ax.fill_between(angles, 0, low_range, color='lightcoral', alpha=0.3, label='低范围')
 
     # 填充正常范围区域 (正常低边界 - 正常高边界)
-    ax.fill_between(angles, normal_low_range, normal_high_range, color='lightgreen', alpha=0.4, label='正常范围')
+    ax.fill_between(angles, normal_low_range, normal_high_range, color='lightgreen', alpha=0.4, label='中间范围')
 
     # 填充高范围区域 (高边界 - 100)
     ax.fill_between(angles, high_range, [100] * len(angles), color='gold', alpha=0.3, label='高范围')
@@ -286,7 +253,7 @@ def visualize_emotions(emotions_df):
     # 绘制中位情感分数
     values = median_emotions.values.tolist()
     values += values[:1]
-    ax.plot(angles, values, 'o-', linewidth=2, markersize=8, color='dodgerblue', label='中位情感分数')
+    ax.plot(angles, values, 'o-', linewidth=2, markersize=8, color='dodgerblue', label='情感分数')
     ax.fill(angles, values, color='dodgerblue', alpha=0.2)
 
     # 设置坐标轴
@@ -299,13 +266,13 @@ def visualize_emotions(emotions_df):
     plt.legend(loc='upper right', bbox_to_anchor=(1.2, 1.1))
 
     # 添加参考范围说明
-    plt.figtext(0.5, 0.01,
-                f"参考范围说明（基于视频数据计算）:\n"
-                f"低范围: 0-{np.median([ref['low'] for ref in reference_ranges.values()]):.1f} "
-                f"正常范围: {np.median([ref['normal_low'] for ref in reference_ranges.values()]):.1f}-"
-                f"{np.median([ref['normal_high'] for ref in reference_ranges.values()]):.1f} "
-                f"高范围: {np.median([ref['high'] for ref in reference_ranges.values()]):.1f}-100",
-                ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
+    # plt.figtext(0.5, 0.01,
+    #             f"参考范围说明（基于视频数据计算）:\n"
+    #             f"低范围: 0-{np.median([ref['low'] for ref in reference_ranges.values()]):.1f} "
+    #             f"正常范围: {np.median([ref['normal_low'] for ref in reference_ranges.values()]):.1f}-"
+    #             f"{np.median([ref['normal_high'] for ref in reference_ranges.values()]):.1f} "
+    #             f"高范围: {np.median([ref['high'] for ref in reference_ranges.values()]):.1f}-100",
+    #             ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
 
     plt.savefig('emotion_radar_with_ranges.png', bbox_inches='tight')
     plt.close()
@@ -398,14 +365,13 @@ def visualize_emotions(emotions_df):
     plt.tight_layout()
     plt.savefig('emotion_slopes.png')
     plt.close()
-
     return slopes_df, reference_ranges
 
 
 # 主处理流程
 if __name__ == "__main__":
     # 处理视频并提取BlendShapes
-    blendshapes_df = process_video('wenzeng.mp4')
+    blendshapes_df = process_video('zhangmi.mp4')
 
     # 计算情感维度
     emotions_df = calculate_emotions(blendshapes_df)
@@ -418,7 +384,7 @@ if __name__ == "__main__":
     with open('reference_ranges.txt', 'w') as f:
         f.write("情感维度参考范围 (基于视频数据分析，使用中位数和四分位数):\n")
         f.write("=" * 70 + "\n")
-        f.write(f"{'情感维度':<20}{'中位数':<10}{'低范围':<15}{'正常范围':<20}{'高范围':<15}\n")
+        f.write(f"{'情感维度':<20}{'中位数':<10}{'低范围':<15}{'中间范围':<20}{'高范围':<15}\n")
         f.write("-" * 70 + "\n")
 
         for emotion, ranges in reference_ranges.items():
@@ -426,7 +392,7 @@ if __name__ == "__main__":
             low = f"{float(ranges['low']):.2f}"
             normal_low = f"{float(ranges['normal_low']):.2f}"
             normal_high = f"{float(ranges['normal_high']):.2f}"
-            normal_low_high = normal_low + normal_high
+            normal_low_high = normal_low + "-" + normal_high
             high = f"{float(ranges['high']):.2f}"
 
             f.write(f"{emotion:<20}{median_val:<10.2f}{low:<15}")
