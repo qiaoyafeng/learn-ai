@@ -1,3 +1,6 @@
+import os
+import uuid
+
 import cv2
 import mediapipe as mp
 import numpy as np
@@ -17,8 +20,8 @@ plt.rcParams['axes.unicode_minus'] = False
 # 情感维度映射配置 (特征: 权重)
 EMOTION_MAPPING = {
     '攻击性': {
-        'jawOpen': 0.25, 'browDownLeft': 0.15, 'browDownRight': 0.15,
-        'mouthStretchLeft': 0.15, 'mouthStretchRight': 0.15, 'jawForward': 0.15
+        'browDownLeft': 0.5, 'browDownRight': 0.5,
+        'eyeWideLeft': 0.5, 'eyeWideRight': 0.5
     },
     '压力': {
         'browInnerUp': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2,
@@ -48,7 +51,7 @@ EMOTION_MAPPING = {
         'mouthPucker': 0.3, 'mouthFunnel': 0.3, 'eyeSquintLeft': 0.2, 'eyeSquintRight': 0.2
     },
     '抑制': {
-        'mouthClose': 0.4, 'mouthClose': 0.3, 'jawForward': 0.3
+        'mouthClose': 0.5, 'jawForward': 0.5
     },
     '神经质': {
         'eyeBlinkLeft': 0.2, 'eyeBlinkRight': 0.2, 'browDownLeft': 0.2,
@@ -65,7 +68,7 @@ EMOTION_MAPPING = {
 }
 
 # 视频处理函数
-def process_video(video_path, output_csv='blendshapes.csv'):
+def process_video(video_path, output_dir="./output"):
     """
         从视频中提取面部Blendshapes数据并保存为CSV文件
         使用MediaPipe FaceLandmarker的VIDEO模式
@@ -162,6 +165,7 @@ def process_video(video_path, output_csv='blendshapes.csv'):
         blendshapes_df.insert(1, 'timestamp', timestamps)
 
         # 保存到CSV
+        output_csv = f'{output_dir}/blendshapes.csv'
         blendshapes_df.to_csv(output_csv, index=False)
         print(f"Blendshapes数据已保存到: {output_csv}")
         return blendshapes_df
@@ -204,7 +208,7 @@ def calculate_emotions(blendshapes_df):
 
 
 # 可视化函数（使用中位数）
-def visualize_emotions(emotions_df):
+def visualize_emotions(emotions_df, output_dir="./output"):
     # 计算参考范围（基于整个视频的情感分数）
     reference_ranges = {}
     for emotion in EMOTION_MAPPING.keys():
@@ -274,7 +278,7 @@ def visualize_emotions(emotions_df):
     #             f"高范围: {np.median([ref['high'] for ref in reference_ranges.values()]):.1f}-100",
     #             ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
 
-    plt.savefig('emotion_radar_with_ranges.png', bbox_inches='tight')
+    plt.savefig(f'{output_dir}/emotion_radar_with_ranges.png', bbox_inches='tight')
     plt.close()
 
     # 2. 箱线图（使用中位数）
@@ -292,7 +296,7 @@ def visualize_emotions(emotions_df):
                 "箱线图说明：箱体表示四分位距(IQR)，中间线表示中位数，须线表示1.5倍IQR范围",
                 ha="center", fontsize=9, bbox={"facecolor": "white", "alpha": 0.7, "pad": 5})
 
-    plt.savefig('emotion_boxplot.png', bbox_inches='tight')
+    plt.savefig(f'{output_dir}/emotion_boxplot.png', bbox_inches='tight')
     plt.close()
 
     # 3. 时间变化曲线（使用滚动中位数）
@@ -335,7 +339,7 @@ def visualize_emotions(emotions_df):
             plt.legend(loc='upper right', fontsize=8)
 
     plt.tight_layout()
-    plt.savefig('emotion_timeline.png')
+    plt.savefig(f'{output_dir}/emotion_timeline.png')
     plt.close()
 
     # 4. 变化斜率图（基于中位数）
@@ -363,25 +367,33 @@ def visualize_emotions(emotions_df):
         plt.grid(alpha=0.2)
 
     plt.tight_layout()
-    plt.savefig('emotion_slopes.png')
+    plt.savefig(f'{output_dir}/emotion_slopes.png')
     plt.close()
     return slopes_df, reference_ranges
 
 
 # 主处理流程
 if __name__ == "__main__":
+    batch_no = f"{uuid.uuid4().hex}"
+    output_dir = f"./output/{batch_no}"
+    # 创建输出目录
+    os.makedirs(output_dir, exist_ok=True)
     # 处理视频并提取BlendShapes
-    blendshapes_df = process_video('zhangmi.mp4')
+    video_path = 'zhangmi.mp4'
+    # video_path = 'portrait.mp4'
+    video_path = 'yunfei.mp4'
+    video_path = 'qiao.mp4'
+    blendshapes_df = process_video(video_path, output_dir=output_dir)
 
     # 计算情感维度
     emotions_df = calculate_emotions(blendshapes_df)
-    emotions_df.to_csv('emotion_scores.csv', index=False)
+    emotions_df.to_csv(f'{output_dir}/emotion_scores.csv', index=False)
 
     # 可视化结果（返回参考范围）
-    slopes_df, reference_ranges = visualize_emotions(emotions_df)
+    slopes_df, reference_ranges = visualize_emotions(emotions_df, output_dir=output_dir)
 
     # 保存参考范围到文件（基于中位数）
-    with open('reference_ranges.txt', 'w') as f:
+    with open(f'{output_dir}/reference_ranges.txt', 'w') as f:
         f.write("情感维度参考范围 (基于视频数据分析，使用中位数和四分位数):\n")
         f.write("=" * 70 + "\n")
         f.write(f"{'情感维度':<20}{'中位数':<10}{'低范围':<15}{'中间范围':<20}{'高范围':<15}\n")
